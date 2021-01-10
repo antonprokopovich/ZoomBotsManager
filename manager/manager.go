@@ -9,8 +9,8 @@ import (
 )
 
 // TODO get actual user data from config
-const setUserData = `window.meetingNumber = "72068651280";
-					 window.meetingPassword = "i5EDv8";
+const setUserData = `window.meetingNumber = "78563092610";
+					 window.meetingPassword = "vF2Hk8";
 					 window.meetingRole = 0;
 					 window.leaveUrl = "http://localhost:3000";
 					 window.userName = "Go Bot";
@@ -50,13 +50,26 @@ func initNonHeadless() (context.Context, context.CancelFunc) {
 	return ctx, cancel
 }
 
+func setMeetingParamsTsk(evalCode string) chromedp.Tasks {
+	var res []byte
+	return chromedp.Tasks{
+		chromedp.Evaluate(evalCode, &res),
+	}
+}
+
+func clickJoinBtnTsk() chromedp.Tasks {
+	return chromedp.Tasks{
+		chromedp.WaitVisible(`join-meeting-button`, chromedp.ByID),
+		chromedp.Click(`join-meeting-button`, chromedp.ByID),
+		chromedp.Sleep(5 * time.Second),
+	}
+}
+
 func joinMeeting(setUserData string, ctxt context.Context) {
-	var setDataRes []byte
 	checkErr(chromedp.Run(ctxt,
 		chromedp.Navigate(`http://localhost:3000`),
-		chromedp.Evaluate(setUserData, &setDataRes),
-
-		clickJoinBtn(),
+		setMeetingParamsTsk(setUserData),
+		clickJoinBtnTsk(),
 	))
 }
 
@@ -67,14 +80,6 @@ func waitFinish() {
 		time.Sleep(60 * time.Second)
 
 		//TODO получать сигнал о завершении
-	}
-}
-
-func clickJoinBtn() chromedp.Tasks {
-	return chromedp.Tasks{
-		chromedp.WaitVisible(`join-meeting-button`, chromedp.ByID),
-		chromedp.Click(`join-meeting-button`, chromedp.ByID),
-		chromedp.Sleep(5 * time.Second),
 	}
 }
 
@@ -99,20 +104,11 @@ func main() {
 
 	ctx, cancel = chromedp.NewContext(
 		ctx,
-		chromedp.WithDebugf(log.Printf),
+		//chromedp.WithDebugf(log.Printf),
 	)
 	defer cancel()
 
-
-	var setDataRes []byte
-	checkErr(chromedp.Run(ctx,
-		chromedp.Navigate(`http://localhost:3000`),
-		chromedp.Evaluate(setUserData, &setDataRes),
-		chromedp.Sleep(5 * time.Second),
-
-		clickJoinBtn(),
-
-	))
+	joinMeeting(setUserData, ctx)
 
 	waitFinish()
 
