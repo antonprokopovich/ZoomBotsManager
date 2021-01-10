@@ -8,10 +8,13 @@ import (
 	"time"
 )
 
-// TODO get actual user data from config?
-const setUserData = `window.username = "John Doe";
-				window.meetingNum = "77605673353";
-				window.meetingPass = "1ei40S";`
+// TODO get actual user data from config
+const setUserData = `window.meetingNumber = "72068651280";
+					 window.meetingPassword = "i5EDv8";
+					 window.meetingRole = 0;
+					 window.leaveUrl = "http://localhost:3000";
+					 window.userName = "Go Bot";
+					 window.userEmail = "john@example.com";`
 
 
 func checkErr(err error) {
@@ -20,15 +23,40 @@ func checkErr(err error) {
 	}
 }
 
-func joinMeeting(setDataJS string, ctxt context.Context) {
-	//var setDataRes []byte
+// Запускает браузер в хэдлесс-режиме
+func initHeadless() (context.Context, context.CancelFunc) {
+	ctx, cancel := chromedp.NewContext(
+			context.Background(),
+			chromedp.WithDebugf(log.Printf),
+		)
+	return ctx, cancel
+}
+
+// Запускает браузер в стандартном режиме (открывает окно)
+func initNonHeadless() (context.Context, context.CancelFunc) {
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.DisableGPU,
+		// Set the headless flag to false to display the browser window
+		chromedp.Flag("headless", false),
+	)
+
+	ctx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	defer cancel()
+
+	ctx, cancel = chromedp.NewContext(
+		ctx,
+		chromedp.WithDebugf(log.Printf),
+	)
+	return ctx, cancel
+}
+
+func joinMeeting(setUserData string, ctxt context.Context) {
+	var setDataRes []byte
 	checkErr(chromedp.Run(ctxt,
 		chromedp.Navigate(`http://localhost:3000`),
-		//chromedp.Evaluate(setUserData, &setDataRes),
-		chromedp.WaitVisible(`join-meeting-button`, chromedp.ByID),
-		chromedp.Click(`join-meeting-button`, chromedp.ByID),
-		chromedp.Sleep(5 * time.Second),
+		chromedp.Evaluate(setUserData, &setDataRes),
 
+		clickJoinBtn(),
 	))
 }
 
@@ -42,15 +70,49 @@ func waitFinish() {
 	}
 }
 
+func clickJoinBtn() chromedp.Tasks {
+	return chromedp.Tasks{
+		chromedp.WaitVisible(`join-meeting-button`, chromedp.ByID),
+		chromedp.Click(`join-meeting-button`, chromedp.ByID),
+		chromedp.Sleep(5 * time.Second),
+	}
+}
+
 
 func main() {
-	ctxt, cancel := chromedp.NewContext(
-			context.Background(),
-			//chromedp.WithDebugf(log.Printf),
-		)
+	// Headless
+	//ctx, cancel := chromedp.NewContext(
+	//	context.Background(),
+	//	chromedp.WithDebugf(log.Printf),
+	//)
+	//defer cancel()
+
+	// Non-headless
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.DisableGPU,
+		// Set the headless flag to false to display the browser window
+		chromedp.Flag("headless", false),
+	)
+
+	ctx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
 	defer cancel()
 
-	joinMeeting(setUserData, ctxt)
+	ctx, cancel = chromedp.NewContext(
+		ctx,
+		chromedp.WithDebugf(log.Printf),
+	)
+	defer cancel()
+
+
+	var setDataRes []byte
+	checkErr(chromedp.Run(ctx,
+		chromedp.Navigate(`http://localhost:3000`),
+		chromedp.Evaluate(setUserData, &setDataRes),
+		chromedp.Sleep(5 * time.Second),
+
+		clickJoinBtn(),
+
+	))
 
 	waitFinish()
 
