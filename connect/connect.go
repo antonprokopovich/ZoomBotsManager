@@ -88,17 +88,31 @@ func clickJoinBtnTsk() chromedp.Tasks {
 	}
 }
 
+func navigateToPage(ctxt context.Context, url string) error {
+	err := chromedp.Run(ctxt,
+		chromedp.Navigate(url),
+	)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // Осуществляет подключение пользователя к митингу, выполняя задачи
 // перехода на страницу клинта, установки параметров и нажатия кнопки
 func joinMeeting(ctxt context.Context, cancel context.CancelFunc, user userRecord) {
 	defer cancel()
 
 	callString := makeCallString(user)
-	checkErr(chromedp.Run(ctxt,
-		chromedp.Navigate(leaveUrl),
+	if err := navigateToPage(ctxt, leaveUrl); err != nil {
+		log.Fatal("Couldn't connect to " + leaveUrl)
+	}
+	if err := chromedp.Run(ctxt,
 		setMeetingParamsTsk(callString),
 		clickJoinBtnTsk(),
-	))
+	); err != nil {
+		log.Fatal("Couldn't joint the meeting #" + user.MeetNum)
+	}
 	time.Sleep(2 * time.Second)
 }
 
