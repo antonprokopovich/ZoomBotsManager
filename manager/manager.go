@@ -14,20 +14,6 @@ import (
 const (
 	leaveUrl = `http://localhost:3000`
 
-	test1 = `window.meetingNumber = "74768911708";
-			 window.meetingPassword = "z6ti6C";
-			 window.meetingRole = 0;
-			 window.userName = "John Doe";
-			 window.userEmail = "john@example.com";
-			 window.leaveUrl = "http://localhost:3000";`
-
-	test2 = `window.meetingNumber = "74768911708";
-					 window.meetingPassword = "z6ti6C";
-					 window.meetingRole = 0;
-					 window.leaveUrl = "http://localhost:3000";
-					 window.userName = "MJ";
-					 window.userEmail = "john@example.com";`
-
 	defaultRole = 0
 )
 
@@ -36,12 +22,11 @@ var (
 )
 
 type userRecord struct {
-	MeetNum   string
-	MeetPass  string
-	Name  string
-	Email string
+	MeetNum  string
+	MeetPass string
+	Name     string
+	Email    string
 }
-
 
 func checkErr(err error) {
 	if err != nil {
@@ -57,12 +42,12 @@ func makeCallString(data userRecord) string {
 				window.userName = "%s";
 				window.userEmail = "%s";
 				window.leaveUrl = "%s";`,
-				data.MeetNum,
-				data.MeetPass,
-				defaultRole,
-				data.Name,
-				data.Email,
-				leaveUrl,
+		data.MeetNum,
+		data.MeetPass,
+		defaultRole,
+		data.Name,
+		data.Email,
+		leaveUrl,
 	)
 }
 
@@ -89,9 +74,9 @@ func getUsersData(filename string) ([]userRecord, error) {
 // Запускает браузер в хэдлесс-режиме
 func initHeadless() (context.Context, context.CancelFunc) {
 	ctx, cancel := chromedp.NewContext(
-			context.Background(),
-			chromedp.WithDebugf(log.Printf),
-		)
+		context.Background(),
+		chromedp.WithDebugf(log.Printf),
+	)
 	return ctx, cancel
 }
 
@@ -136,14 +121,6 @@ func joinMeeting(ctxt context.Context, cancel context.CancelFunc, user userRecor
 	defer cancel()
 
 	callString := makeCallString(user)
-
-	//if callString != test1 {
-	//	fmt.Println(callString)
-	//	fmt.Println(test1)
-	//	panic("!!! NOT EQUAL !!!: " )
-	//}
-
-	fmt.Println(callString)
 	checkErr(chromedp.Run(ctxt,
 		chromedp.Navigate(leaveUrl),
 		setMeetingParamsTsk(callString),
@@ -162,24 +139,7 @@ func waitFinish() {
 	}
 }
 
-
 func main() {
-	// Non-headless
-	//opts := append(chromedp.DefaultExecAllocatorOptions[:],
-	//	chromedp.DisableGPU,
-	//	// Set the headless flag to false to display the browser window
-	//	chromedp.Flag("headless", false),
-	//)
-	//
-	//ctx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	//defer cancel()
-	//
-	//ctx, cancel = chromedp.NewContext(
-	//	ctx,
-	//	//chromedp.WithDebugf(log.Printf),
-	//)
-
-
 	users, err := getUsersData(*dataFilename)
 	if err == nil {
 		for _, user := range users {
@@ -198,31 +158,4 @@ func main() {
 
 	waitFinish()
 
-}
-
-//test
-func _main() {
-	usr := userRecord{
-		MeetNum:   "74768911708",
-		MeetPass:  "z6ti6C",
-		Name:  "John Doe",
-		Email: "john@example.com",
-	}
-	//fmt.Println(makeCallString(usr))
-
-	//data, err := getUsersData("users.json")
-	//if err == nil {
-	//	for _, u := range data {
-	//		fmt.Println(u)
-	//	}
-	//}
-
-	// Headless
-	ctx, cancel := chromedp.NewContext(
-		context.Background(),
-		//chromedp.WithDebugf(log.Printf),
-	)
-
-	joinMeeting(ctx, cancel, usr)
-	waitFinish()
 }
