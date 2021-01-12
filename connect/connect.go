@@ -71,33 +71,6 @@ func getUsersData(filename string) ([]userRecord, error) {
 	return usrs, nil
 }
 
-// Запускает браузер в хэдлесс-режиме
-func initHeadless() (context.Context, context.CancelFunc) {
-	ctx, cancel := chromedp.NewContext(
-		context.Background(),
-		chromedp.WithDebugf(log.Printf),
-	)
-	return ctx, cancel
-}
-
-// Запускает браузер в стандартном режиме (открывает окно)
-func initNonHeadless() (context.Context, context.CancelFunc) {
-	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.DisableGPU,
-		// Set the headless flag to false to display the browser window
-		chromedp.Flag("headless", false),
-	)
-
-	ctx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
-	defer cancel()
-
-	ctx, cancel = chromedp.NewContext(
-		ctx,
-		chromedp.WithDebugf(log.Printf),
-	)
-	return ctx, cancel
-}
-
 // Возвращает задачу установки параметров для подключения
 func setMeetingParamsTsk(callString string) chromedp.Tasks {
 	var res []byte
@@ -140,10 +113,8 @@ func waitFinish() {
 }
 
 func main() {
-	users, err := getUsersData(*dataFilename)
-	if err == nil {
+	if users, err := getUsersData(*dataFilename); err == nil {
 		for _, user := range users {
-
 			// Headless
 			ctx, cancel := chromedp.NewContext(
 				context.Background(),
@@ -154,8 +125,6 @@ func main() {
 			time.Sleep(2 * time.Second)
 
 		}
+		waitFinish()
 	}
-
-	waitFinish()
-
 }
