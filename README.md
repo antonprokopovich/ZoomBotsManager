@@ -2,6 +2,6 @@
 
 `$ git clone https://github.com/antonprokopovich/zoom_bots_manager.git`
 
-`$ cd cd connect`
+`$ cd connect`
 
 `$ go run connect.go`
