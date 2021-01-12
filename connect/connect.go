@@ -88,6 +88,7 @@ func clickJoinBtnTsk() chromedp.Tasks {
 	}
 }
 
+// Запускает браузер и переходит на страницу подключения к митингу
 func navigateToPage(ctxt context.Context, url string) error {
 	err := chromedp.Run(ctxt,
 		chromedp.Navigate(url),
