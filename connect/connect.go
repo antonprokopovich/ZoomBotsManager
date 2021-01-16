@@ -2,12 +2,10 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"flag"
 	"fmt"
 	"github.com/chromedp/chromedp-0.6.0"
+	"github.com/spf13/viper"
 	"log"
-	"os"
 	"time"
 )
 
@@ -17,15 +15,24 @@ const (
 	defaultRole = 0
 )
 
-var (
-	dataFilename = flag.String("data", "users.json", "user data file name")
-)
-
 type userRecord struct {
 	MeetNum  string
 	MeetPass string
 	Name     string
 	Email    string
+}
+
+type conRecord struct {
+	MeetNum    string
+	MeetPass   string
+	StartTime  string
+	FinishTime string
+	UserName   string
+	UserEmail  string
+}
+
+type config struct {
+	Connections []conRecord
 }
 
 func checkErr(err error) {
@@ -34,7 +41,7 @@ func checkErr(err error) {
 	}
 }
 
-func makeCallString(data userRecord) string {
+func makeCallString(data conRecord) string {
 	return fmt.Sprintf(
 		`window.meetingNumber = "%s";
 				window.meetingPassword = "%s";
@@ -45,30 +52,10 @@ func makeCallString(data userRecord) string {
 		data.MeetNum,
 		data.MeetPass,
 		defaultRole,
-		data.Name,
-		data.Email,
+		data.UserName,
+		data.UserEmail,
 		leaveUrl,
 	)
-}
-
-// Загружает (из json-файла) данные каждого пользователя в
-// объект userRecord и возвращает массив с этими объектами
-func getUsersData(filename string) ([]userRecord, error) {
-	var usrs []userRecord
-
-	f, err := os.Open(filename)
-	if err != nil {
-		fmt.Println("Error opening data file:", err)
-		return nil, err
-	}
-	defer f.Close()
-
-	d := json.NewDecoder(f)
-	if err := d.Decode(&usrs); err != nil {
-		fmt.Println("Error decoding data file:", err)
-		return nil, err
-	}
-	return usrs, nil
 }
 
 // Возвращает задачу установки параметров для подключения
@@ -101,20 +88,21 @@ func navigateToPage(ctxt context.Context, url string) error {
 
 // Осуществляет подключение пользователя к митингу, выполняя задачи
 // перехода на страницу клинта, установки параметров и нажатия кнопки
-func joinMeeting(ctxt context.Context, cancel context.CancelFunc, user userRecord) {
+func joinMeeting(ctxt context.Context, cancel context.CancelFunc, con conRecord) {
 	defer cancel()
 
-	callString := makeCallString(user)
+	callString := makeCallString(con)
 	if err := navigateToPage(ctxt, leaveUrl); err != nil {
-		log.Fatal("Couldn't connect to " + leaveUrl)
+		fmt.Println("Couldn't connect to " + leaveUrl)
+		return
 	}
 	if err := chromedp.Run(ctxt,
 		setMeetingParamsTsk(callString),
 		clickJoinBtnTsk(),
 	); err != nil {
-		log.Fatal("Couldn't joint the meeting #" + user.MeetNum)
+		fmt.Println("Couldn't joint the meeting #" + con.MeetNum)
+		return
 	}
-	time.Sleep(2 * time.Second)
 }
 
 // Сохраняет подключение к митингу пока ведущий не завершит его
@@ -127,19 +115,36 @@ func waitFinish() {
 	}
 }
 
-func main() {
-	if users, err := getUsersData(*dataFilename); err == nil {
-		for _, user := range users {
-			// Headless
-			ctx, cancel := chromedp.NewContext(
-				context.Background(),
-				//chromedp.WithDebugf(log.Printf),
-			)
-			joinMeeting(ctx, cancel, user)
+func getCfg() config {
 
-			time.Sleep(2 * time.Second)
+	viper.SetConfigType("json")
+	viper.AddConfigPath("./config")
+	viper.SetConfigName("config")
 
-		}
-		waitFinish()
+	if err := viper.ReadInConfig(); err != nil {
+		panic(err)
 	}
+
+	var cfg config
+	err := viper.Unmarshal(&cfg)
+	if err != nil {
+		panic("Unable to unmarshal config")
+	}
+
+	return cfg
+}
+
+func main() {
+	cfg := getCfg()
+	for _, con := range cfg.Connections {
+
+		ctx, cancel := chromedp.NewContext(
+			context.Background(),
+			//chromedp.WithDebugf(log.Printf),
+		)
+		joinMeeting(ctx, cancel, con)
+		time.Sleep(2 * time.Second)
+	}
+	waitFinish()
+
 }

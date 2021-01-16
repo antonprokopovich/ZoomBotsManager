@@ -1,0 +1,21 @@
+{
+  "Connections":
+  [
+    {
+      "MeetNum": "71475668366",
+      "MeetPass": "c2RrC4",
+      "StartTime": "",
+      "FinishTime": "",
+      "UserName": "Ivan Drago",
+      "UserEmail": "ivan@mail.ru"
+    },
+    {
+      "MeetNum": "71475668366",
+      "MeetPass": "c2RrC4",
+      "StartTime": "",
+      "FinishTime": "",
+      "UserName": "Joe Doe",
+      "UserEmail": "joe@mail.ru"
+    }
+  ]
+}
