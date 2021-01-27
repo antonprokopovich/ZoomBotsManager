@@ -15,13 +15,6 @@ const (
 	defaultRole = 0
 )
 
-type userRecord struct {
-	MeetNum  string
-	MeetPass string
-	Name     string
-	Email    string
-}
-
 type conRecord struct {
 	MeetNum    string
 	MeetPass   string
@@ -86,17 +79,19 @@ func navigateToPage(ctxt context.Context, url string) error {
 	return nil
 }
 
-// Осуществляет подключение пользователя к митингу, выполняя задачи
-// перехода на страницу клинта, установки параметров и нажатия кнопки
-func joinMeeting(ctxt context.Context, cancel context.CancelFunc, con conRecord) {
+// Осуществляет подключение пользователя к митингу на заданное время,
+//выполняя задачи перехода на страницу клинта, установки параметров и
+//нажатия кнопки
+func joinMeeting(ctxt context.Context, con conRecord, to time.Duration) {
+	ctxtTimed, cancel := context.WithTimeout(ctxt, to)
 	defer cancel()
 
 	callString := makeCallString(con)
-	if err := navigateToPage(ctxt, leaveUrl); err != nil {
+	if err := navigateToPage(ctxtTimed, leaveUrl); err != nil {
 		fmt.Println("Couldn't connect to " + leaveUrl)
 		return
 	}
-	if err := chromedp.Run(ctxt,
+	if err := chromedp.Run(ctxtTimed,
 		setMeetingParamsTsk(callString),
 		clickJoinBtnTsk(),
 	); err != nil {
@@ -137,14 +132,17 @@ func getCfg() config {
 func main() {
 	cfg := getCfg()
 	for _, con := range cfg.Connections {
+		func() {
+			ctx, cancel := chromedp.NewContext(
+				context.Background(),
+				//chromedp.WithDebugf(log.Printf),
+			)
+			defer cancel()
 
-		ctx, cancel := chromedp.NewContext(
-			context.Background(),
-			//chromedp.WithDebugf(log.Printf),
-		)
-		joinMeeting(ctx, cancel, con)
-		time.Sleep(2 * time.Second)
+			joinMeeting(ctx, con, 30*time.Second)
+			time.Sleep(2 * time.Second)
+		}()
+
 	}
 	waitFinish()
-
 }
