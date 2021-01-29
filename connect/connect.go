@@ -6,6 +6,9 @@ import (
 	"github.com/chromedp/chromedp-0.6.0"
 	"github.com/spf13/viper"
 	"log"
+	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,12 +19,13 @@ const (
 )
 
 type conRecord struct {
-	MeetNum    string
-	MeetPass   string
-	StartTime  string
-	FinishTime string
-	UserName   string
-	UserEmail  string
+	MeetNum   string
+	MeetPass  string
+	Date      string
+	Time      string
+	Duration  string
+	UserName  string
+	UserEmail string
 }
 
 type config struct {
@@ -79,37 +83,6 @@ func navigateToPage(ctxt context.Context, url string) error {
 	return nil
 }
 
-// Осуществляет подключение пользователя к митингу на заданное время,
-//выполняя задачи перехода на страницу клинта, установки параметров и
-//нажатия кнопки
-func joinMeeting(ctxt context.Context, con conRecord, to time.Duration) {
-	ctxtTimed, cancel := context.WithTimeout(ctxt, to)
-	defer cancel()
-
-	callString := makeCallString(con)
-	if err := navigateToPage(ctxtTimed, leaveUrl); err != nil {
-		fmt.Println("Couldn't connect to " + leaveUrl)
-		return
-	}
-	if err := chromedp.Run(ctxtTimed,
-		setMeetingParamsTsk(callString),
-		clickJoinBtnTsk(),
-	); err != nil {
-		fmt.Println("Couldn't joint the meeting #" + con.MeetNum)
-		return
-	}
-}
-
-// Сохраняет подключение к митингу пока ведущий не завершит его
-func waitFinish() {
-	for {
-		fmt.Println("Waiting for meeting to finish...")
-		time.Sleep(60 * time.Second)
-
-		//TODO получать сигнал о завершении
-	}
-}
-
 func getCfg() config {
 
 	viper.SetConfigType("json")
@@ -129,20 +102,141 @@ func getCfg() config {
 	return cfg
 }
 
+// TODO use int (not int64)
+func stringToInt(s string) (int, error) {
+	value, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		fmt.Println("Couldn't parse time string")
+		return 0, err
+	}
+	return int(value), nil
+}
+
+// Парсит строку времени начала конференции формата "HH:MM:SS" и возращает
+// три целых цисла - час, минута, секунда
+func parseStartTime(time string) (hour int, minute int, second int) {
+	a := strings.Split(time, ":")
+
+	h, err := stringToInt(a[0])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	m, err := stringToInt(a[1])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	s, err := stringToInt(a[2])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	//fmt.Printf("Hour: %d, Minute: %d, Second: %d", h, m, s)
+	return h, m, s
+}
+
+// TODO
+func parseStartDate(date string) (day int, month int, year int) {
+	return 0, 0, 0
+}
+
+func parseDuration(dur string) time.Duration {
+	m, _ := stringToInt(dur)
+	return time.Duration(m) * time.Minute
+}
+
+type jobTicker struct {
+	timer *time.Timer
+}
+
+func (t *jobTicker) setTimerToday(hour int, minute int, second int) {
+	nextTick := time.Date(time.Now().Year(), time.Now().Month(),
+		time.Now().Day(), hour, minute, second, 0, time.Local)
+	if !nextTick.After(time.Now()) {
+		//nextTick = nextTick.Add(IntervalPeriod)
+		panic("Can't join meeting in the past")
+	}
+
+	diff := nextTick.Sub(time.Now())
+	if t.timer == nil {
+		t.timer = time.NewTimer(diff)
+	} else {
+		t.timer.Reset(diff)
+	}
+}
+
+//Осуществляет подключение пользователя к митингу на заданное время,
+//выполняя задачи перехода на страницу клинта, установки параметров и
+//нажатия кнопки
+func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conData conRecord, wg *sync.WaitGroup) {
+	defer wg.Done()
+	defer func() {
+		fmt.Printf(
+			"Canceling main context for meeting: %s user: %s\n",
+			conData.MeetNum, conData.UserName,
+		)
+		cancelMain()
+	}()
+
+	dur := parseDuration(conData.Duration)
+	h, m, s := parseStartTime(conData.Time)
+
+	fmt.Printf("Will join meeting %s at %d:%d:%d \n", conData.MeetNum, h, m, s)
+
+	t := jobTicker{}
+	t.setTimerToday(h, m, s)
+	<-t.timer.C
+
+	fmt.Printf("Joining meeting %s \n", conData.MeetNum)
+	ctxtTimed, cancel := context.WithTimeout(ctxtMain, dur)
+	defer func() {
+		fmt.Println("Canceling context with timeout")
+		cancel()
+	}()
+
+	callString := makeCallString(conData)
+	if err := navigateToPage(ctxtTimed, leaveUrl); err != nil {
+		fmt.Println("Couldn't connect to " + leaveUrl)
+		fmt.Println(err)
+		return
+	}
+	if err := chromedp.Run(ctxtTimed,
+		setMeetingParamsTsk(callString),
+		clickJoinBtnTsk(),
+		// Сохраняем подключение к митингу в течении заданного периода
+		chromedp.Sleep(dur),
+	); err != nil {
+		fmt.Println("Couldn't joint the meeting #" + conData.MeetNum)
+		return
+	}
+}
+
+func _main() {
+	//parseStartTime("15:55:00")
+	//parseDuration("1")
+}
+
+//Проходит по списку с данными подключений и
+//подключает каждого человека к назначенной ему конференции в
+//указанное время и на указанный период. По истечению периода
+//отключает пользователя
 func main() {
+
 	cfg := getCfg()
+
+	var wg sync.WaitGroup
 	for _, con := range cfg.Connections {
 		func() {
 			ctx, cancel := chromedp.NewContext(
 				context.Background(),
 				//chromedp.WithDebugf(log.Printf),
 			)
-			defer cancel()
 
-			joinMeeting(ctx, con, 30*time.Second)
-			time.Sleep(2 * time.Second)
+			wg.Add(1)
+			go joinMeeting(ctx, cancel, con, &wg)
 		}()
-
 	}
-	waitFinish()
+	wg.Wait()
 }
