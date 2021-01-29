@@ -4,8 +4,8 @@
     {
       "MeetNum": "79118791406",
       "MeetPass": "ENF3HE",
-      "Date": "29.01.21",
-      "Time": "16:35:00",
+      "Date": "29.01",
+      "Time": "16:47:00",
       "Duration": "3",
       "UserName": "Ivan Drago",
       "UserEmail": "ivan@mail.ru"
@@ -13,9 +13,9 @@
     {
       "MeetNum": "79118791406",
       "MeetPass": "ENF3HE",
-      "Date": "29.01.21",
-      "Time": "16:35:00",
-      "Duration": "3",
+      "Date": "29.01",
+      "Time": "16:47:00",
+      "Duration": "1",
       "UserName": "Joe Doe",
       "UserEmail": "joe@mail.ru"
     }

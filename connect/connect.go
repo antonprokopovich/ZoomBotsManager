@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/chromedp/chromedp-0.6.0"
 	"github.com/spf13/viper"
-	"log"
 	"strconv"
 	"strings"
 	"sync"
@@ -32,9 +31,36 @@ type config struct {
 	Connections []conRecord
 }
 
-func checkErr(err error) {
-	if err != nil {
-		log.Fatal(err)
+type jobTicker struct {
+	timer *time.Timer
+}
+
+type timeData struct {
+	hour   int
+	minute int
+	second int
+}
+
+type dateData struct {
+	day   int
+	month int
+}
+
+func (t *jobTicker) setTimerToday(dd dateData, td timeData) {
+	nextTick := time.Date(
+		time.Now().Year(), time.Month(dd.month), dd.day,
+		td.hour, td.minute, td.second, 0, time.Local)
+
+	if !nextTick.After(time.Now()) {
+		//nextTick = nextTick.Add(IntervalPeriod)
+		panic("Can't join meeting in the past")
+	}
+
+	diff := nextTick.Sub(time.Now())
+	if t.timer == nil {
+		t.timer = time.NewTimer(diff)
+	} else {
+		t.timer.Reset(diff)
 	}
 }
 
@@ -84,7 +110,6 @@ func navigateToPage(ctxt context.Context, url string) error {
 }
 
 func getCfg() config {
-
 	viper.SetConfigType("json")
 	viper.AddConfigPath("./config")
 	viper.SetConfigName("config")
@@ -114,7 +139,7 @@ func stringToInt(s string) (int, error) {
 
 // Парсит строку времени начала конференции формата "HH:MM:SS" и возращает
 // три целых цисла - час, минута, секунда
-func parseStartTime(time string) (hour int, minute int, second int) {
+func parseStartTime(time string) (td timeData) {
 	a := strings.Split(time, ":")
 
 	h, err := stringToInt(a[0])
@@ -134,37 +159,32 @@ func parseStartTime(time string) (hour int, minute int, second int) {
 	}
 
 	//fmt.Printf("Hour: %d, Minute: %d, Second: %d", h, m, s)
-	return h, m, s
+	return timeData{h, m, s}
 }
 
-// TODO
-func parseStartDate(date string) (day int, month int, year int) {
-	return 0, 0, 0
+// Парсит строку даты начала конференции формата "DD:MM" и возращает
+// три целых цисла - день, месяц
+func parseStartDate(date string) (dd dateData) {
+	a := strings.Split(date, ".")
+
+	d, err := stringToInt(a[0])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	m, err := stringToInt(a[1])
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	fmt.Printf("Day: %d, Month: %d", d, m)
+	return dateData{d, m}
 }
 
 func parseDuration(dur string) time.Duration {
 	m, _ := stringToInt(dur)
 	return time.Duration(m) * time.Minute
-}
-
-type jobTicker struct {
-	timer *time.Timer
-}
-
-func (t *jobTicker) setTimerToday(hour int, minute int, second int) {
-	nextTick := time.Date(time.Now().Year(), time.Now().Month(),
-		time.Now().Day(), hour, minute, second, 0, time.Local)
-	if !nextTick.After(time.Now()) {
-		//nextTick = nextTick.Add(IntervalPeriod)
-		panic("Can't join meeting in the past")
-	}
-
-	diff := nextTick.Sub(time.Now())
-	if t.timer == nil {
-		t.timer = time.NewTimer(diff)
-	} else {
-		t.timer.Reset(diff)
-	}
 }
 
 //Осуществляет подключение пользователя к митингу на заданное время,
@@ -181,22 +201,25 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 	}()
 
 	dur := parseDuration(conData.Duration)
-	h, m, s := parseStartTime(conData.Time)
+	sTime := parseStartTime(conData.Time)
+	sDate := parseStartDate(conData.Date)
 
-	fmt.Printf("Will join meeting %s at %d:%d:%d \n", conData.MeetNum, h, m, s)
+	fmt.Printf("Will join meeting %s at %d:%d:%d \n",
+		conData.MeetNum, sTime.hour, sTime.minute, sTime.second)
 
 	t := jobTicker{}
-	t.setTimerToday(h, m, s)
+	t.setTimerToday(sDate, sTime)
 	<-t.timer.C
 
-	fmt.Printf("Joining meeting %s \n", conData.MeetNum)
+	fmt.Printf("Joining meeting %s for %s minutes \n",
+		conData.MeetNum, conData.Duration)
 
-	callString := makeCallString(conData)
 	if err := navigateToPage(ctxtMain, leaveUrl); err != nil {
 		fmt.Println("Couldn't connect to " + leaveUrl)
 		fmt.Println(err)
 		return
 	}
+	callString := makeCallString(conData)
 	if err := chromedp.Run(ctxtMain,
 		setMeetingParamsTsk(callString),
 		clickJoinBtnTsk(),
@@ -212,7 +235,7 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 //подключает каждого человека к назначенной ему конференции в
 //указанное время и на указанный период. По истечению периода
 //отключает пользователя
-func main() {
+func _main() {
 
 	cfg := getCfg()
 
