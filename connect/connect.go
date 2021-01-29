@@ -102,7 +102,7 @@ func getCfg() config {
 	return cfg
 }
 
-// TODO use int (not int64)
+// TODO parse to int (not int64)
 func stringToInt(s string) (int, error) {
 	value, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
@@ -190,19 +190,14 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 	<-t.timer.C
 
 	fmt.Printf("Joining meeting %s \n", conData.MeetNum)
-	ctxtTimed, cancel := context.WithTimeout(ctxtMain, dur)
-	defer func() {
-		fmt.Println("Canceling context with timeout")
-		cancel()
-	}()
 
 	callString := makeCallString(conData)
-	if err := navigateToPage(ctxtTimed, leaveUrl); err != nil {
+	if err := navigateToPage(ctxtMain, leaveUrl); err != nil {
 		fmt.Println("Couldn't connect to " + leaveUrl)
 		fmt.Println(err)
 		return
 	}
-	if err := chromedp.Run(ctxtTimed,
+	if err := chromedp.Run(ctxtMain,
 		setMeetingParamsTsk(callString),
 		clickJoinBtnTsk(),
 		// Сохраняем подключение к митингу в течении заданного периода
@@ -211,11 +206,6 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 		fmt.Println("Couldn't joint the meeting #" + conData.MeetNum)
 		return
 	}
-}
-
-func _main() {
-	//parseStartTime("15:55:00")
-	//parseDuration("1")
 }
 
 //Проходит по списку с данными подключений и
