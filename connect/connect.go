@@ -46,7 +46,7 @@ type dateData struct {
 	month int
 }
 
-func (t *jobTicker) setTimerToday(dd dateData, td timeData) {
+func (t *jobTicker) setTimer(dd dateData, td timeData) {
 	nextTick := time.Date(
 		time.Now().Year(), time.Month(dd.month), dd.day,
 		td.hour, td.minute, td.second, 0, time.Local)
@@ -208,7 +208,7 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 		conData.MeetNum, sTime.hour, sTime.minute, sTime.second)
 
 	t := jobTicker{}
-	t.setTimerToday(sDate, sTime)
+	t.setTimer(sDate, sTime)
 	<-t.timer.C
 
 	fmt.Printf("Joining meeting %s for %s minutes \n",
