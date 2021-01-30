@@ -211,8 +211,8 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 	t.setTimer(sDate, sTime)
 	<-t.timer.C
 
-	fmt.Printf("Joining meeting %s for %s minutes \n",
-		conData.MeetNum, conData.Duration)
+	fmt.Printf("%s is joining meeting %s for %s minutes \n",
+		conData.UserName, conData.MeetNum, conData.Duration)
 
 	if err := navigateToPage(ctxtMain, leaveUrl); err != nil {
 		fmt.Println("Couldn't connect to " + leaveUrl)
