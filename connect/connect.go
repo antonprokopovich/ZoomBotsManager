@@ -223,13 +223,6 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 	sTime := parseStartTime(conData.Time)
 	sDate := parseStartDate(conData.Date)
 
-	//if isStartOutdated(sTime, sDate) {
-	//	fmt.Printf(
-	//		"Skipping outdated meeting (Number: %s Date: %s Time: %s ",
-	//		conData.MeetNum, conData.Date, conData.Time)
-	//	return
-	//}
-
 	fmt.Printf("Will join meeting %s at %d:%d:%d \n",
 		conData.MeetNum, sTime.hour, sTime.minute, sTime.second)
 
