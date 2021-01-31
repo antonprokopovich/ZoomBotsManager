@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"github.com/chromedp/chromedp-0.6.0"
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"strconv"
 	"strings"
@@ -17,6 +19,11 @@ const (
 	defaultRole = 0
 )
 
+type pendingConList struct {
+	m    sync.Mutex
+	cons []string
+}
+
 type conRecord struct {
 	MeetNum   string
 	MeetPass  string
@@ -27,12 +34,18 @@ type conRecord struct {
 	UserEmail string
 }
 
-type config struct {
-	Connections []conRecord
+// Хэширует запись соединения.
+// Используется для создания уникального ключа, под которым
+// соединение будет храниться в памяти после прочтения его из конфига
+func (c conRecord) asSha256() string {
+	h := sha256.New()
+	h.Write([]byte(fmt.Sprintf("%v", c)))
+
+	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
-type jobTicker struct {
-	timer *time.Timer
+type config struct {
+	Connections []conRecord
 }
 
 type timeData struct {
@@ -44,6 +57,10 @@ type timeData struct {
 type dateData struct {
 	day   int
 	month int
+}
+
+type jobTicker struct {
+	timer *time.Timer
 }
 
 func (t *jobTicker) setTimer(dd dateData, td timeData) {
@@ -61,6 +78,26 @@ func (t *jobTicker) setTimer(dd dateData, td timeData) {
 		t.timer = time.NewTimer(diff)
 	} else {
 		t.timer.Reset(diff)
+	}
+}
+
+func isStartOutdated(r conRecord) bool {
+	td, dd := parseStartTime(r.Time), parseStartDate(r.Date)
+
+	start := time.Date(
+		time.Now().Year(), time.Month(dd.month), dd.day,
+		td.hour, td.minute, td.second, 0, time.Local)
+
+	if start.After(time.Now()) {
+		return false
+	}
+
+	return true
+}
+
+func NewPendingStore() *pendingConList {
+	return &pendingConList{
+		cons: make([]string, 0),
 	}
 }
 
@@ -107,24 +144,6 @@ func navigateToPage(ctxt context.Context, url string) error {
 		return err
 	}
 	return nil
-}
-
-func getCfg() config {
-	viper.SetConfigType("json")
-	viper.AddConfigPath("./config")
-	viper.SetConfigName("config")
-
-	if err := viper.ReadInConfig(); err != nil {
-		panic(err)
-	}
-
-	var cfg config
-	err := viper.Unmarshal(&cfg)
-	if err != nil {
-		panic("Unable to unmarshal config")
-	}
-
-	return cfg
 }
 
 // TODO parse to int (not int64)
@@ -178,7 +197,7 @@ func parseStartDate(date string) (dd dateData) {
 		return
 	}
 
-	fmt.Printf("Day: %d, Month: %d", d, m)
+	//fmt.Printf("Day: %d, Month: %d", d, m)
 	return dateData{d, m}
 }
 
@@ -203,6 +222,13 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 	dur := parseDuration(conData.Duration)
 	sTime := parseStartTime(conData.Time)
 	sDate := parseStartDate(conData.Date)
+
+	//if isStartOutdated(sTime, sDate) {
+	//	fmt.Printf(
+	//		"Skipping outdated meeting (Number: %s Date: %s Time: %s ",
+	//		conData.MeetNum, conData.Date, conData.Time)
+	//	return
+	//}
 
 	fmt.Printf("Will join meeting %s at %d:%d:%d \n",
 		conData.MeetNum, sTime.hour, sTime.minute, sTime.second)
@@ -231,25 +257,64 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 	}
 }
 
-//Проходит по списку с данными подключений и
-//подключает каждого человека к назначенной ему конференции в
-//указанное время и на указанный период. По истечению периода
-//отключает пользователя
-func main() {
+func getCfg() config {
+	viper.SetConfigType("json")
+	viper.AddConfigPath("./config")
+	viper.SetConfigName("config")
 
-	cfg := getCfg()
+	if err := viper.ReadInConfig(); err != nil {
+		panic(err)
+	}
 
-	var wg sync.WaitGroup
+	var cfg config
+	err := viper.Unmarshal(&cfg)
+	if err != nil {
+		panic("Unable to unmarshal config")
+	}
+
+	return cfg
+}
+
+func initNewCons(cfg config, wg *sync.WaitGroup) {
 	for _, con := range cfg.Connections {
-		func() {
+		// TODO проверять наличие подключения в pending
+		if !isStartOutdated(con) {
 			ctx, cancel := chromedp.NewContext(
 				context.Background(),
 				//chromedp.WithDebugf(log.Printf),
 			)
 
+			store.m.Lock()
+			store.cons = append(store.cons, con.asSha256())
+			store.m.Unlock()
+
 			wg.Add(1)
-			go joinMeeting(ctx, cancel, con, &wg)
-		}()
+			go joinMeeting(ctx, cancel, con, wg)
+		}
 	}
+}
+
+var store *pendingConList
+
+//Проходит по списку с данными подключений и
+//подключает каждого человека к назначенной ему конференции в
+//указанное время и на указанный период. По истечению периода
+//отключает пользователя
+func main() {
+	store = NewPendingStore()
+
+	cfg := getCfg()
+
+	viper.WatchConfig()
+	// TODO запускать initNewCons по обновлению конфига
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		fmt.Println("Config file changed:", e.Name)
+		cfg = getCfg()
+	})
+
+	var wg sync.WaitGroup
+
+	initNewCons(cfg, &wg)
+
 	wg.Wait()
 }
