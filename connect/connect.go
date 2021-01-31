@@ -20,7 +20,7 @@ const (
 )
 
 type pendingConList struct {
-	m    sync.Mutex
+	m    sync.RWMutex
 	cons []string
 }
 
@@ -268,18 +268,31 @@ func getCfg() config {
 	return cfg
 }
 
+func isPending(c conRecord) bool {
+	pending.m.RLock()
+	defer pending.m.RUnlock()
+
+	for _, p := range pending.cons {
+		if p == c.asSha256() {
+			fmt.Printf("Connection is already pending (user: %s meeting: %s)",
+				c.UserName, c.MeetNum)
+			return true
+		}
+	}
+	return false
+}
+
 func initNewCons(cfg config, wg *sync.WaitGroup) {
 	for _, con := range cfg.Connections {
-		// TODO проверять наличие подключения в pending
-		if !isStartOutdated(con) {
+		if !isStartOutdated(con) && !isPending(con) {
 			ctx, cancel := chromedp.NewContext(
 				context.Background(),
 				//chromedp.WithDebugf(log.Printf),
 			)
 
-			store.m.Lock()
-			store.cons = append(store.cons, con.asSha256())
-			store.m.Unlock()
+			pending.m.Lock()
+			pending.cons = append(pending.cons, con.asSha256())
+			pending.m.Unlock()
 
 			wg.Add(1)
 			go joinMeeting(ctx, cancel, con, wg)
@@ -287,25 +300,23 @@ func initNewCons(cfg config, wg *sync.WaitGroup) {
 	}
 }
 
-var store *pendingConList
+var pending *pendingConList
 
 //Проходит по списку с данными подключений и
 //подключает каждого человека к назначенной ему конференции в
 //указанное время и на указанный период. По истечению периода
 //отключает пользователя
-func main() {
-	store = NewPendingStore()
-
+func _main() {
+	pending = NewPendingStore()
 	cfg := getCfg()
+
+	var wg sync.WaitGroup
 
 	viper.WatchConfig()
 	// TODO запускать initNewCons по обновлению конфига
 	viper.OnConfigChange(func(e fsnotify.Event) {
 		fmt.Println("Config file changed:", e.Name)
-		cfg = getCfg()
 	})
-
-	var wg sync.WaitGroup
 
 	initNewCons(cfg, &wg)
 
