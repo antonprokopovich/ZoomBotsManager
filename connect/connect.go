@@ -92,10 +92,11 @@ func isStartOutdated(r conRecord) bool {
 		return false
 	}
 
+	fmt.Printf("Meeting %s start time has alrealy passed\n", r.MeetNum)
 	return true
 }
 
-func NewPendingStore() *pendingConList {
+func NewPendingList() *pendingConList {
 	return &pendingConList{
 		cons: make([]string, 0),
 	}
@@ -223,8 +224,8 @@ func joinMeeting(ctxtMain context.Context, cancelMain context.CancelFunc, conDat
 	sTime := parseStartTime(conData.Time)
 	sDate := parseStartDate(conData.Date)
 
-	fmt.Printf("Will join meeting %s at %d:%d:%d \n",
-		conData.MeetNum, sTime.hour, sTime.minute, sTime.second)
+	fmt.Printf("%s will join meeting %s at %d:%d:%d \n",
+		conData.UserName, conData.MeetNum, sTime.hour, sTime.minute, sTime.second)
 
 	t := jobTicker{}
 	t.setTimer(sDate, sTime)
@@ -274,7 +275,7 @@ func isPending(c conRecord) bool {
 
 	for _, p := range pending.cons {
 		if p == c.asSha256() {
-			fmt.Printf("Connection is already pending (user: %s meeting: %s)",
+			fmt.Printf("Connection is already pending (user: %s meeting: %s)\n",
 				c.UserName, c.MeetNum)
 			return true
 		}
@@ -307,18 +308,19 @@ var pending *pendingConList
 //указанное время и на указанный период. По истечению периода
 //отключает пользователя
 func main() {
-	pending = NewPendingStore()
-	cfg := getCfg()
+	pending = NewPendingList()
 
 	var wg sync.WaitGroup
 
+	cfg := getCfg()
 	viper.WatchConfig()
-	// TODO запускать initNewCons по обновлению конфига
 	viper.OnConfigChange(func(e fsnotify.Event) {
 		fmt.Println("Config file changed:", e.Name)
+
+		cfg = getCfg()
+		initNewCons(cfg, &wg)
 	})
 
 	initNewCons(cfg, &wg)
-
 	wg.Wait()
 }
