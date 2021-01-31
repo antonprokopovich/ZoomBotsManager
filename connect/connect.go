@@ -306,7 +306,7 @@ var pending *pendingConList
 //подключает каждого человека к назначенной ему конференции в
 //указанное время и на указанный период. По истечению периода
 //отключает пользователя
-func _main() {
+func main() {
 	pending = NewPendingStore()
 	cfg := getCfg()
 
